@@ -2,7 +2,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.Date;
+import java.io.Writer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -12,8 +14,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.joda.time.DateTime;
-import org.joda.time.Days;
-import org.joda.time.YearMonth;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 
@@ -23,6 +23,9 @@ public class Generator {
 
 	private Random rand = new Random();
 	private DateTime dt = new DateTime(-12599128349000l);
+	private WritableByteChannel channel = Channels.newChannel(System.out);
+	private Writer outWriter = Channels.newWriter(channel, "UTF-8");
+	private float rate;
 
 	public interface BufferedReaderVistor {
 
@@ -30,12 +33,17 @@ public class Generator {
 
 	}
 
+	public Generator(float rate) {
+		this.rate = rate;
+	}
+
 	/**
 	 * @param args
 	 * @throws IOException
 	 */
 	public static void main(String[] args) throws IOException {
-		Generator gen = new Generator();
+		float rate = Float.parseFloat(args[0]);
+		Generator gen = new Generator(rate);
 		gen.generate();
 	}
 
@@ -144,8 +152,11 @@ public class Generator {
 									parts[i] = "@" + parts[i];
 								}
 							}
-							tweet(fileNum, lineNum, tweetNum, name,
-									joiner.join(parts));
+							String tweetText = joiner.join(parts).trim();
+							if (tweetText.length() > 0 && rand.nextFloat()<=rate) {
+								tweet(fileNum, lineNum, tweetNum, name,
+										tweetText);
+							}
 						}
 					} else {
 						continue;
@@ -154,13 +165,17 @@ public class Generator {
 			}
 
 			private void tweet(int fileNum, int lineNum, int tweetNum,
-					String name, String tweetText) {
+					String name, String tweetText) throws IOException {
 				dt = dt.plus(rand.nextInt(80000));
-				DateTimeFormatter dtf = DateTimeFormat.forPattern("EEE, ee MMM yyyy HH:mm:ss");
+				DateTimeFormatter dtf = DateTimeFormat
+						.forPattern("EEE, ee MMM yyyy HH:mm:ss");
 				// time needs to match Thu, 28 Jun 2012 19:16:21 +0000
-				System.out.println(String.format(
-						"{\"created_at\":\"%s +0000\",\"text\":\"%s\",\"from_user\":\"%s\"}",
-						dtf.print(dt), tweetText.replaceAll("\"", "'"), name));
+				outWriter
+						.write(String
+								.format("{\"created_at\":\"%s +0000\",\"text\":\"%s\",\"from_user\":\"%s\"}\n",
+										dtf.print(dt),
+										tweetText.replaceAll("\"", "'"), name));
+				outWriter.flush();
 			}
 		});
 	}
@@ -175,7 +190,8 @@ public class Generator {
 				InputStream is = Generator.class
 						.getResourceAsStream(resourceName);
 				if (is == null) {
-//					System.err.printf("File %s doesn't exist\n", resourceName);
+					// System.err.printf("File %s doesn't exist\n",
+					// resourceName);
 					continue;
 				}
 				reader = new BufferedReader(new InputStreamReader(is));
